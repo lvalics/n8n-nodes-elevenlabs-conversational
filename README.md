@@ -17,6 +17,10 @@ This n8n community node enables seamless integration of **[ElevenLabs](https://e
   - Get document content and chunks
   - Compute RAG (Retrieval Augmented Generation) indexes
   - View agents dependent on specific documents
+- Phone Number management:
+  - Create phone numbers with Twilio or SIP Trunk
+  - List, retrieve, and delete phone numbers
+  - Assign phone numbers to agents
 - Make outbound phone calls via Twilio integration
 - Generate shareable links for your agents
 
@@ -47,4 +51,4 @@ This node allows you to harness these capabilities within your n8n workflows.
 
 ## License
 
-[MIT](https://github.com/n8n-io/n8n-nodes-elevenlabs-conversational/blob/master/LICENSE.md)
+[MIT](https://github.com/lvalics/n8n-nodes-elevenlabs-conversational/blob/master/LICENSE.md)

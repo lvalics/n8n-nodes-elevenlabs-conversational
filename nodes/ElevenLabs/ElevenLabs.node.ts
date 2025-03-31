@@ -29,6 +29,11 @@ import {
   knowledgeBaseFields, 
   executeKnowledgeBaseOperation 
 } from './services/KnowledgeBaseService';
+import { 
+  phoneOperations, 
+  phoneFields, 
+  executePhoneOperation 
+} from './services/PhoneService';
 
 export class ElevenLabs implements INodeType {
   description: INodeTypeDescription = {
@@ -70,6 +75,10 @@ export class ElevenLabs implements INodeType {
             value: 'knowledgeBase',
           },
           {
+            name: 'Phone',
+            value: 'phone',
+          },
+          {
             name: 'Voice',
             value: 'voice',
           },
@@ -86,6 +95,8 @@ export class ElevenLabs implements INodeType {
       ...conversationFields,
       ...knowledgeBaseOperations,
       ...knowledgeBaseFields,
+      ...phoneOperations,
+      ...phoneFields,
       {
         displayName: 'Operation',
         name: 'operation',
@@ -827,6 +838,9 @@ export class ElevenLabs implements INodeType {
         }
         else if (resource === 'knowledgeBase') {
           responseItem = await executeKnowledgeBaseOperation.call(this, i, operation, i);
+        }
+        else if (resource === 'phone') {
+          responseItem = await executePhoneOperation.call(this, i, operation, i);
         }
         
         // Add the response to the return data
