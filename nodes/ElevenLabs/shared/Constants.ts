@@ -35,10 +35,15 @@ export const SUPPORTED_LANGUAGES = [
 
 export const LLM_MODELS = [
   { name: 'Gemini 2.0 Flash', value: 'gemini-2.0-flash-001' },
-  { name: 'Gemini 2.0 Pro', value: 'gemini-2.0-pro-001' },
-  { name: 'Gemini 1.5 Pro', value: 'gemini-1.5-pro-001' },
-  { name: 'Gemini 1.5 Flash', value: 'gemini-1.5-flash-001' },
-  { name: 'Claude Opus', value: 'claude-3-opus-20240229' },
-  { name: 'Claude Sonnet', value: 'claude-3-sonnet-20240229' },
-  { name: 'Claude Haiku', value: 'claude-3-haiku-20240307' },
+  { name: 'Gemini 2.0 Flash Lite', value: 'gemini-2.0-flash-lite' },
+  { name: 'Gemini 1.5 Flash', value: 'gemini-1.5-flash' },
+  { name: 'Gemini 1.5 Pro', value: 'gemini-1.5-pro' },
+  { name: 'Gemini 1.0 Pro', value: 'gemini-1.0-pro' },
+  { name: 'GPT-4o Mini', value: 'gpt-4o-mini' },
+  { name: 'GPT-4o', value: 'gpt-4o' },
+  { name: 'GPT-4 Turbo', value: 'gpt-4-turbo' },
+  { name: 'GPT-3.5 Turbo', value: 'gpt-3.5-turbo' },
+  { name: 'Claude 3.7 Sonnet', value: 'claude-3-7-sonnet' },
+  { name: 'Claude 3.5 Sonnet V2', value: 'claude-3-5-sonnet' },
+  { name: 'Claude 3 Haiku', value: 'claude-3-haiku' },
 ];

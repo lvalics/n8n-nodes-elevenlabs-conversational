@@ -64,6 +64,14 @@ export class ElevenLabs implements INodeType {
             name: 'Agent',
             value: 'agent',
           },
+          {
+            name: 'Conversation',
+            value: 'conversation',
+          },
+          {
+            name: 'Voice',
+            value: 'voice',
+          },
         ],
         default: 'agent',
       },
@@ -104,20 +112,36 @@ export class ElevenLabs implements INodeType {
             description: 'List all agents',
             action: 'List all agents',
           },
-          {
-            name: 'Update',
-            value: 'update',
-            description: 'Update an agent',
-            action: 'Update an agent',
-          },
-          {
-            name: 'Delete',
-            value: 'delete',
-            description: 'Delete an agent',
-            action: 'Delete an agent',
-          },
         ],
         default: 'create',
+      },
+      {
+        displayName: 'Operation',
+        name: 'operation',
+        type: 'options',
+        noDataExpression: true,
+        displayOptions: {
+          show: {
+            resource: [
+              'voice',
+            ],
+          },
+        },
+        options: [
+          {
+            name: 'List',
+            value: 'list',
+            description: 'Get a list of all available voices',
+            action: 'List all voices',
+          },
+          {
+            name: 'Get',
+            value: 'get',
+            description: 'Get a specific voice by ID',
+            action: 'Get a voice',
+          },
+        ],
+        default: 'list',
       },
 
       // CREATE OPERATION
@@ -143,7 +167,8 @@ export class ElevenLabs implements INodeType {
           rows: 4,
         },
         default: 'You are a helpful assistant that answers questions professionally.',
-        description: 'The system prompt is used to determine the persona of the agent and the context of the conversation',
+        description: 'The system prompt is used to determine the persona of the agent and the context of the conversation. You can use system variables like: system__agent_id, system__caller_id, system__called_number, system__time_utc, system__conversation_id, etc.',
+        hint: 'Supports variables: system__agent_id, system__caller_id, system__called_number, system__call_duration_secs, system__time_utc, system__conversation_id, system__call_sid',
         required: true,
         displayOptions: {
           show: {
@@ -268,9 +293,55 @@ export class ElevenLabs implements INodeType {
         displayOptions: {
           show: {
             resource: ['agent'],
-            operation: ['get', 'update', 'delete', 'getLink'],
+            operation: ['get', 'getLink'],
           },
         },
+      },
+      {
+        displayName: 'Options',
+        name: 'options',
+        type: 'collection',
+        placeholder: 'Add Option',
+        default: {},
+        displayOptions: {
+          show: {
+            resource: ['agent'],
+            operation: ['getLink'],
+          },
+        },
+        options: [
+          {
+            displayName: 'Generate Shareable Token',
+            name: 'generateToken',
+            type: 'boolean',
+            default: false,
+            description: 'Whether to generate a shareable token for the agent',
+          },
+          {
+            displayName: 'Token Duration (Days)',
+            name: 'tokenDuration',
+            type: 'number',
+            default: 7,
+            description: 'Duration in days for which the token is valid',
+            displayOptions: {
+              show: {
+                generateToken: [true],
+              },
+            },
+          },
+          {
+            displayName: 'Max Uses',
+            name: 'maxUses',
+            type: 'number',
+            default: 0,
+            description: 'Maximum number of times the token can be used (0 for unlimited)',
+            displayOptions: {
+              show: {
+                generateToken: [true],
+              },
+            },
+          },
+        ],
       },
 
       // LIST OPERATION
@@ -328,47 +399,394 @@ export class ElevenLabs implements INodeType {
         ],
       },
 
-      // UPDATE OPERATION
+      // VOICE: LIST OPERATION
       {
-        displayName: 'Update Fields',
-        name: 'updateFields',
+        displayName: 'Return All',
+        name: 'returnAll',
+        type: 'boolean',
+        default: false,
+        description: 'Whether to return all results or only up to a given limit',
+        displayOptions: {
+          show: {
+            resource: ['voice'],
+            operation: ['list'],
+          },
+        },
+      },
+      {
+        displayName: 'Limit',
+        name: 'limit',
+        type: 'number',
+        default: 10,
+        description: 'Max number of results to return',
+        typeOptions: {
+          minValue: 1,
+          maxValue: 100,
+        },
+        displayOptions: {
+          show: {
+            resource: ['voice'],
+            operation: ['list'],
+            returnAll: [false],
+          },
+        },
+      },
+      {
+        displayName: 'Filters',
+        name: 'filters',
         type: 'collection',
-        placeholder: 'Add Field',
+        placeholder: 'Add Filter',
         default: {},
         displayOptions: {
           show: {
-            resource: ['agent'],
-            operation: ['update'],
+            resource: ['voice'],
+            operation: ['list'],
           },
         },
         options: [
           {
-            displayName: 'Name',
-            name: 'name',
+            displayName: 'Search',
+            name: 'search',
             type: 'string',
             default: '',
-            description: 'A name to make the agent easier to find',
+            description: 'Search term to filter voices by name, description, labels, or category',
           },
           {
-            displayName: 'Conversation Config',
-            name: 'conversationConfig',
-            type: 'json',
-            default: '{}',
-            description: 'Conversation configuration for the agent',
+            displayName: 'Category',
+            name: 'category',
+            type: 'options',
+            options: [
+              { name: 'Premade', value: 'premade' },
+              { name: 'Cloned', value: 'cloned' },
+              { name: 'Generated', value: 'generated' },
+              { name: 'Professional', value: 'professional' },
+            ],
+            default: '',
+            description: 'Filter voices by category',
           },
           {
-            displayName: 'Platform Settings',
-            name: 'platformSettings',
-            type: 'json',
-            default: '{}',
-            description: 'Platform settings for the agent',
+            displayName: 'Voice Type',
+            name: 'voiceType',
+            type: 'options',
+            options: [
+              { name: 'Personal', value: 'personal' },
+              { name: 'Community', value: 'community' },
+              { name: 'Default', value: 'default' },
+              { name: 'Workspace', value: 'workspace' },
+            ],
+            default: '',
+            description: 'Filter voices by type',
           },
           {
-            displayName: 'Use Tool IDs',
-            name: 'useToolIds',
+            displayName: 'Sort',
+            name: 'sort',
+            type: 'options',
+            options: [
+              { name: 'Created At', value: 'created_at_unix' },
+              { name: 'Name', value: 'name' },
+            ],
+            default: '',
+            description: 'Field to sort by',
+          },
+          {
+            displayName: 'Sort Direction',
+            name: 'sortDirection',
+            type: 'options',
+            options: [
+              { name: 'Ascending', value: 'asc' },
+              { name: 'Descending', value: 'desc' },
+            ],
+            default: '',
+            description: 'Sort direction',
+          },
+          {
+            displayName: 'Include Total Count',
+            name: 'includeTotalCount',
             type: 'boolean',
-            default: false,
-            description: 'Whether to use tool IDs instead of tool specs',
+            default: true,
+            description: 'Whether to include the total count of voices in the response. Incurs a performance cost.',
+          },
+        ],
+      },
+
+      // VOICE: GET OPERATION
+      {
+        displayName: 'Voice ID',
+        name: 'voiceId',
+        type: 'string',
+        required: true,
+        default: '',
+        description: 'The ID of the voice to retrieve',
+        displayOptions: {
+          show: {
+            resource: ['voice'],
+            operation: ['get'],
+          },
+        },
+      },
+
+      {
+        displayName: 'Operation',
+        name: 'operation',
+        type: 'options',
+        noDataExpression: true,
+        displayOptions: {
+          show: {
+            resource: [
+              'conversation',
+            ],
+          },
+        },
+        options: [
+          {
+            name: 'Delete',
+            value: 'delete',
+            description: 'Delete a conversation',
+            action: 'Delete a conversation',
+          },
+          {
+            name: 'Get',
+            value: 'get',
+            description: 'Get conversation details',
+            action: 'Get conversation details',
+          },
+          {
+            name: 'Get Audio',
+            value: 'getAudio',
+            description: 'Get conversation audio',
+            action: 'Get conversation audio',
+          },
+          {
+            name: 'Get Signed URL',
+            value: 'getSignedUrl',
+            description: 'Get a signed URL for a conversation',
+            action: 'Get a signed URL',
+          },
+          {
+            name: 'List',
+            value: 'list',
+            description: 'Get all conversations',
+            action: 'List all conversations',
+          },
+          {
+            name: 'Send Feedback',
+            value: 'sendFeedback',
+            description: 'Send feedback for a conversation',
+            action: 'Send feedback for a conversation',
+          },
+          {
+            name: 'Outbound Call',
+            value: 'outboundCall',
+            description: 'Make an outbound call via Twilio',
+            action: 'Make an outbound call',
+          },
+        ],
+        default: 'list',
+      },
+
+      // CONVERSATION: LIST OPERATION
+      {
+        displayName: 'Return All',
+        name: 'returnAll',
+        type: 'boolean',
+        default: false,
+        description: 'Whether to return all results or only up to a given limit',
+        displayOptions: {
+          show: {
+            resource: ['conversation'],
+            operation: ['list'],
+          },
+        },
+      },
+      {
+        displayName: 'Limit',
+        name: 'limit',
+        type: 'number',
+        default: 30,
+        description: 'Max number of results to return',
+        typeOptions: {
+          minValue: 1,
+          maxValue: 100,
+        },
+        displayOptions: {
+          show: {
+            resource: ['conversation'],
+            operation: ['list'],
+            returnAll: [false],
+          },
+        },
+      },
+      {
+        displayName: 'Filters',
+        name: 'filters',
+        type: 'collection',
+        placeholder: 'Add Filter',
+        default: {},
+        displayOptions: {
+          show: {
+            resource: ['conversation'],
+            operation: ['list'],
+          },
+        },
+        options: [
+          {
+            displayName: 'Agent ID',
+            name: 'agentId',
+            type: 'string',
+            default: '',
+            description: 'Filter conversations by agent ID',
+          },
+          {
+            displayName: 'Call Successful',
+            name: 'callSuccessful',
+            type: 'options',
+            options: [
+              {
+                name: 'Success',
+                value: 'success',
+              },
+              {
+                name: 'Failure',
+                value: 'failure',
+              },
+              {
+                name: 'Unknown',
+                value: 'unknown',
+              },
+            ],
+            default: '',
+            description: 'Filter by the success status of the call',
+          },
+        ],
+      },
+
+      // CONVERSATION: GET, DELETE, GET AUDIO, SEND FEEDBACK OPERATIONS
+      {
+        displayName: 'Conversation ID',
+        name: 'conversationId',
+        type: 'string',
+        required: true,
+        default: '',
+        description: 'The ID of the conversation',
+        displayOptions: {
+          show: {
+            resource: ['conversation'],
+            operation: ['get', 'delete', 'getAudio', 'sendFeedback'],
+          },
+        },
+      },
+
+      // CONVERSATION: GET SIGNED URL OPERATION
+      {
+        displayName: 'Agent ID',
+        name: 'agentId',
+        type: 'string',
+        required: true,
+        default: '',
+        description: 'The ID of the agent to get a signed URL for',
+        displayOptions: {
+          show: {
+            resource: ['conversation'],
+            operation: ['getSignedUrl'],
+          },
+        },
+      },
+
+      // CONVERSATION: SEND FEEDBACK OPERATION
+      {
+        displayName: 'Feedback',
+        name: 'feedback',
+        type: 'options',
+        options: [
+          {
+            name: 'Like',
+            value: 'like',
+          },
+          {
+            name: 'Dislike',
+            value: 'dislike',
+          },
+        ],
+        required: true,
+        default: 'like',
+        description: 'The feedback for the conversation',
+        displayOptions: {
+          show: {
+            resource: ['conversation'],
+            operation: ['sendFeedback'],
+          },
+        },
+      },
+
+      // CONVERSATION: OUTBOUND CALL OPERATION
+      {
+        displayName: 'Agent ID',
+        name: 'agentId',
+        type: 'string',
+        required: true,
+        default: '',
+        description: 'The ID of the agent that will make the call',
+        displayOptions: {
+          show: {
+            resource: ['conversation'],
+            operation: ['outboundCall'],
+          },
+        },
+      },
+      {
+        displayName: 'Agent Phone Number ID',
+        name: 'agentPhoneNumberId',
+        type: 'string',
+        required: true,
+        default: '',
+        description: 'The ID of the phone number to use for the agent',
+        displayOptions: {
+          show: {
+            resource: ['conversation'],
+            operation: ['outboundCall'],
+          },
+        },
+      },
+      {
+        displayName: 'To Number',
+        name: 'toNumber',
+        type: 'string',
+        required: true,
+        default: '',
+        description: 'The phone number to call in E.164 format (e.g., +15551234567)',
+        displayOptions: {
+          show: {
+            resource: ['conversation'],
+            operation: ['outboundCall'],
+          },
+        },
+      },
+      {
+        displayName: 'Additional Options',
+        name: 'additionalOptions',
+        type: 'collection',
+        placeholder: 'Add Option',
+        default: {},
+        displayOptions: {
+          show: {
+            resource: ['conversation'],
+            operation: ['outboundCall'],
+          },
+        },
+        options: [
+          {
+            displayName: 'First Message',
+            name: 'firstMessage',
+            type: 'string',
+            default: '',
+            description: 'The first message the agent will say when the call is answered',
+          },
+          {
+            displayName: 'Dynamic Variables',
+            name: 'dynamicVariables',
+            type: 'json',
+            default: '{}',
+            description: 'Custom variables to use in the conversation',
           },
         ],
       },
@@ -528,11 +946,33 @@ export class ElevenLabs implements INodeType {
           // GET AGENT LINK
           else if (operation === 'getLink') {
             const agentId = this.getNodeParameter('agentId', i) as string;
+            const options = this.getNodeParameter('options', i, {}) as {
+              generateToken?: boolean;
+              tokenDuration?: number;
+              maxUses?: number;
+            };
+
+            // Build query parameters
+            const qs: any = {};
+            
+            if (options.generateToken) {
+              qs.generate_token = true;
+              
+              if (options.tokenDuration) {
+                qs.token_duration_days = options.tokenDuration;
+              }
+              
+              if (options.maxUses !== undefined) {
+                qs.token_max_uses = options.maxUses;
+              }
+            }
 
             const responseData = await elevenLabsApiRequest.call(
               this,
               'GET',
               `/convai/agents/${agentId}/link`,
+              {},
+              qs,
             );
 
             returnData.push({
@@ -586,64 +1026,307 @@ export class ElevenLabs implements INodeType {
             }
           }
 
-          // UPDATE AGENT
-          else if (operation === 'update') {
-            const agentId = this.getNodeParameter('agentId', i) as string;
-            const updateFields = this.getNodeParameter('updateFields', i) as {
-              name?: string;
-              conversationConfig?: object;
-              platformSettings?: object;
-              useToolIds?: boolean;
+        }
+        else if (resource === 'voice') {
+          // LIST VOICES
+          if (operation === 'list') {
+            const returnAll = this.getNodeParameter('returnAll', i) as boolean;
+            const filters = this.getNodeParameter('filters', i) as {
+              search?: string;
+              category?: string;
+              voiceType?: string;
+              sort?: string;
+              sortDirection?: string;
+              includeTotalCount?: boolean;
             };
 
-            const body: any = {};
             const qs: any = {};
-
-            if (updateFields.name) {
-              body.name = updateFields.name;
+            
+            // Add filters to query parameters
+            if (filters.search) {
+              qs.search = filters.search;
+            }
+            if (filters.category) {
+              qs.category = filters.category;
+            }
+            if (filters.voiceType) {
+              qs.voice_type = filters.voiceType;
+            }
+            if (filters.sort) {
+              qs.sort = filters.sort;
+            }
+            if (filters.sortDirection) {
+              qs.sort_direction = filters.sortDirection;
+            }
+            if (filters.includeTotalCount !== undefined) {
+              qs.include_total_count = filters.includeTotalCount;
             }
 
-            if (updateFields.conversationConfig) {
-              body.conversation_config = updateFields.conversationConfig;
+            // Note that the voice API uses v2 endpoint
+            if (returnAll) {
+              // Use pagination to get all voices
+              let allVoices: any[] = [];
+              let hasMore = true;
+              let nextPageToken = '';
+              
+              while (hasMore) {
+                if (nextPageToken) {
+                  qs.next_page_token = nextPageToken;
+                }
+                
+                const response = await elevenLabsApiRequest.call(
+                  this,
+                  'GET',
+                  '/voices',
+                  {},
+                  qs,
+                  'https://api.elevenlabs.io/v2/voices' // Use v2 endpoint for voices
+                );
+                
+                if (response.voices && Array.isArray(response.voices)) {
+                  allVoices = allVoices.concat(response.voices);
+                }
+                
+                hasMore = response.has_more || false;
+                nextPageToken = response.next_page_token || '';
+              }
+              
+              returnData.push({
+                json: { voices: allVoices },
+                pairedItem: { item: i },
+              });
+            } else {
+              const limit = this.getNodeParameter('limit', i) as number;
+              qs.page_size = limit;
+              
+              const response = await elevenLabsApiRequest.call(
+                this,
+                'GET',
+                '/voices',
+                {},
+                qs,
+                'https://api.elevenlabs.io/v2/voices' // Use v2 endpoint for voices
+              );
+              
+              returnData.push({
+                json: response,
+                pairedItem: { item: i },
+              });
             }
-
-            if (updateFields.platformSettings) {
-              body.platform_settings = updateFields.platformSettings;
-            }
-
-            if (updateFields.useToolIds) {
-              qs.use_tool_ids = updateFields.useToolIds;
-            }
-
-            const responseData = await elevenLabsApiRequest.call(
+          }
+          
+          // GET VOICE
+          else if (operation === 'get') {
+            const voiceId = this.getNodeParameter('voiceId', i) as string;
+            
+            const response = await elevenLabsApiRequest.call(
               this,
-              'PATCH',
-              `/convai/agents/${agentId}`,
-              body,
-              qs,
+              'GET',
+              `/voices/${voiceId}`, // Use the v1 voices endpoint with voice ID
+              {},
+              {},
+              undefined // Don't specify a full URI, let it use the default v1 endpoint
             );
-
+            
             returnData.push({
-              json: responseData,
+              json: response,
               pairedItem: { item: i },
             });
           }
+        }
+        else if (resource === 'conversation') {
+          // LIST CONVERSATIONS
+          if (operation === 'list') {
+            const returnAll = this.getNodeParameter('returnAll', i) as boolean;
+            const filters = this.getNodeParameter('filters', i) as {
+              agentId?: string;
+              callSuccessful?: string;
+            };
 
-          // DELETE AGENT
+            const qs: any = {};
+            
+            if (filters.agentId) {
+              qs.agent_id = filters.agentId;
+            }
+            
+            if (filters.callSuccessful) {
+              qs.call_successful = filters.callSuccessful;
+            }
+
+            if (returnAll) {
+              const responseData = await elevenLabsApiRequestAllItems.call(
+                this,
+                'GET',
+                '/convai/conversations',
+                {},
+                qs,
+              );
+              
+              returnData.push({
+                json: { conversations: responseData },
+                pairedItem: { item: i },
+              });
+            } else {
+              const limit = this.getNodeParameter('limit', i) as number;
+              qs.page_size = limit;
+              
+              const response = await elevenLabsApiRequest.call(
+                this,
+                'GET',
+                '/convai/conversations',
+                {},
+                qs,
+              );
+              
+              returnData.push({
+                json: response,
+                pairedItem: { item: i },
+              });
+            }
+          }
+          
+          // GET CONVERSATION
+          else if (operation === 'get') {
+            const conversationId = this.getNodeParameter('conversationId', i) as string;
+            
+            const response = await elevenLabsApiRequest.call(
+              this,
+              'GET',
+              `/convai/conversations/${conversationId}`,
+            );
+            
+            returnData.push({
+              json: response,
+              pairedItem: { item: i },
+            });
+          }
+          
+          // DELETE CONVERSATION
           else if (operation === 'delete') {
-            const agentId = this.getNodeParameter('agentId', i) as string;
-
-            await elevenLabsApiRequest.call(
+            const conversationId = this.getNodeParameter('conversationId', i) as string;
+            
+            const response = await elevenLabsApiRequest.call(
               this,
               'DELETE',
-              `/convai/agents/${agentId}`,
+              `/convai/conversations/${conversationId}`,
             );
-
+            
             returnData.push({
-              json: { 
-                success: true,
-                message: `Agent with ID ${agentId} successfully deleted` 
-              },
+              json: response || { success: true },
+              pairedItem: { item: i },
+            });
+          }
+          
+          // GET CONVERSATION AUDIO
+          else if (operation === 'getAudio') {
+            const conversationId = this.getNodeParameter('conversationId', i) as string;
+            
+            const response = await elevenLabsApiRequest.call(
+              this,
+              'GET',
+              `/convai/conversations/${conversationId}/audio`,
+            );
+            
+            returnData.push({
+              json: response,
+              pairedItem: { item: i },
+            });
+          }
+          
+          // GET SIGNED URL
+          else if (operation === 'getSignedUrl') {
+            const agentId = this.getNodeParameter('agentId', i) as string;
+            
+            const response = await elevenLabsApiRequest.call(
+              this,
+              'GET',
+              '/convai/conversation/get_signed_url',
+              {},
+              { agent_id: agentId },
+            );
+            
+            returnData.push({
+              json: response,
+              pairedItem: { item: i },
+            });
+          }
+          
+          // SEND FEEDBACK
+          else if (operation === 'sendFeedback') {
+            const conversationId = this.getNodeParameter('conversationId', i) as string;
+            const feedback = this.getNodeParameter('feedback', i) as string;
+            
+            const response = await elevenLabsApiRequest.call(
+              this,
+              'POST',
+              `/convai/conversations/${conversationId}/feedback`,
+              { feedback },
+            );
+            
+            returnData.push({
+              json: response || { success: true },
+              pairedItem: { item: i },
+            });
+          }
+          
+          // OUTBOUND CALL
+          else if (operation === 'outboundCall') {
+            const agentId = this.getNodeParameter('agentId', i) as string;
+            const agentPhoneNumberId = this.getNodeParameter('agentPhoneNumberId', i) as string;
+            const toNumber = this.getNodeParameter('toNumber', i) as string;
+            const additionalOptions = this.getNodeParameter('additionalOptions', i) as {
+              firstMessage?: string;
+              dynamicVariables?: string | object;
+            };
+            
+            const body: any = {
+              agent_id: agentId,
+              agent_phone_number_id: agentPhoneNumberId,
+              to_number: toNumber,
+            };
+            
+            // Add conversation initiation data if we have additional options
+            if (Object.keys(additionalOptions).length > 0) {
+              const conversationInitiationClientData: any = {};
+              
+              if (additionalOptions.firstMessage) {
+                if (!conversationInitiationClientData.conversation_config_override) {
+                  conversationInitiationClientData.conversation_config_override = {};
+                }
+                if (!conversationInitiationClientData.conversation_config_override.agent) {
+                  conversationInitiationClientData.conversation_config_override.agent = {};
+                }
+                conversationInitiationClientData.conversation_config_override.agent.first_message = additionalOptions.firstMessage;
+              }
+              
+              if (additionalOptions.dynamicVariables) {
+                let dynamicVariables = additionalOptions.dynamicVariables;
+                
+                if (typeof dynamicVariables === 'string') {
+                  try {
+                    dynamicVariables = JSON.parse(dynamicVariables);
+                  } catch (error) {
+                    throw new Error(`Invalid JSON for dynamic variables: ${error.message}`);
+                  }
+                }
+                
+                conversationInitiationClientData.dynamic_variables = dynamicVariables;
+              }
+              
+              if (Object.keys(conversationInitiationClientData).length > 0) {
+                body.conversation_initiation_client_data = conversationInitiationClientData;
+              }
+            }
+            
+            const response = await elevenLabsApiRequest.call(
+              this,
+              'POST',
+              '/convai/twilio/outbound_call',
+              body,
+            );
+            
+            returnData.push({
+              json: response,
               pairedItem: { item: i },
             });
           }
