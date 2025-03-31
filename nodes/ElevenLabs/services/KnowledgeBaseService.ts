@@ -356,15 +356,15 @@ export async function executeKnowledgeBaseOperation(
     };
 
     const qs: any = {};
-    
+
     if (filters.search) {
       qs.search = filters.search;
     }
-    
+
     if (filters.showOnlyOwnedDocuments !== undefined) {
       qs.show_only_owned_documents = filters.showOnlyOwnedDocuments;
     }
-    
+
     if (filters.useTypesense !== undefined) {
       qs.use_typesense = filters.useTypesense;
     }
@@ -378,7 +378,7 @@ export async function executeKnowledgeBaseOperation(
         qs,
         'documents'
       );
-      
+
       return {
         json: { documents: responseData },
         pairedItem: { item: itemIndex },
@@ -386,7 +386,7 @@ export async function executeKnowledgeBaseOperation(
     } else {
       const limit = this.getNodeParameter('limit', i) as number;
       qs.page_size = limit;
-      
+
       responseData = await elevenLabsApiRequest.call(
         this,
         'GET',
@@ -396,63 +396,63 @@ export async function executeKnowledgeBaseOperation(
       );
     }
   }
-  
+
   // GET DOCUMENT
   else if (operation === 'getDocument') {
     const documentId = this.getNodeParameter('documentId', i) as string;
-    
+
     responseData = await elevenLabsApiRequest.call(
       this,
       'GET',
       `/convai/knowledge-base/${documentId}`,
     );
   }
-  
+
   // DELETE DOCUMENT
   else if (operation === 'deleteDocument') {
     const documentId = this.getNodeParameter('documentId', i) as string;
-    
+
     responseData = await elevenLabsApiRequest.call(
       this,
       'DELETE',
       `/convai/knowledge-base/${documentId}`,
     );
-    
+
     if (!responseData) {
       responseData = { success: true };
     }
   }
-  
+
   // GET DOCUMENT CONTENT
   else if (operation === 'getDocumentContent') {
     const documentId = this.getNodeParameter('documentId', i) as string;
-    
+
     responseData = await elevenLabsApiRequest.call(
       this,
       'GET',
       `/convai/knowledge-base/${documentId}/content`,
     );
   }
-  
+
   // GET DOCUMENT CHUNK
   else if (operation === 'getDocumentChunk') {
     const documentId = this.getNodeParameter('documentId', i) as string;
     const chunkId = this.getNodeParameter('chunkId', i) as string;
-    
+
     responseData = await elevenLabsApiRequest.call(
       this,
       'GET',
       `/convai/knowledge-base/${documentId}/chunk/${chunkId}`,
     );
   }
-  
+
   // GET DEPENDENT AGENTS
   else if (operation === 'getDependentAgents') {
     const documentId = this.getNodeParameter('documentId', i) as string;
     const returnAll = this.getNodeParameter('returnAll', i) as boolean;
-    
+
     const qs: any = {};
-    
+
     if (returnAll) {
       responseData = await elevenLabsApiRequestAllItems.call(
         this,
@@ -462,7 +462,7 @@ export async function executeKnowledgeBaseOperation(
         qs,
         'agents'
       );
-      
+
       return {
         json: { agents: responseData },
         pairedItem: { item: itemIndex },
@@ -470,7 +470,7 @@ export async function executeKnowledgeBaseOperation(
     } else {
       const limit = this.getNodeParameter('limit', i) as number;
       qs.page_size = limit;
-      
+
       responseData = await elevenLabsApiRequest.call(
         this,
         'GET',
@@ -480,71 +480,75 @@ export async function executeKnowledgeBaseOperation(
       );
     }
   }
-  
+
   // CREATE DOCUMENT
   else if (operation === 'createDocument') {
     const documentType = this.getNodeParameter('documentType', i) as string;
     const additionalFields = this.getNodeParameter('additionalFields', i) as {
       name?: string;
     };
-    
+
     if (documentType === 'url') {
-      // For URL uploads - keep as JSON
+      // For URL uploads
       const url = this.getNodeParameter('url', i) as string;
-      
-      // Make sure the URL is being properly passed
-      const body: any = {
-        url: url,
+
+      // Create the body with the format matching the Python client
+      const body: Record<string, any> = {
+        url: {
+          type: "json",
+          value: url
+        }
       };
-      
+
+      // Add name only if specified
       if (additionalFields.name) {
         body.name = additionalFields.name;
       }
-      
-      responseData = await elevenLabsApiRequest.call(
-        this,
-        'POST',
-        '/convai/knowledge-base',
-        body,
-      );
+
+      try {
+        // Use the elevenLabsApiRequest function with the properly structured body
+        responseData = await elevenLabsApiRequest.call(
+          this,
+          'POST',
+          '/convai/knowledge-base',
+          body,
+        );
+
+      } catch (error) {
+        // Rethrow a more helpful error message
+        throw new Error(`URL document creation failed: ${error.message}. Make sure the URL is valid and accessible.`);
+      }
     } else {
       // For file uploads - get binary data
       const binaryData = this.getNodeParameter('binaryData', i) as boolean;
-      
+
       if (binaryData) {
         const binaryPropertyName = this.getNodeParameter('binaryPropertyName', i) as string;
-        
+
         if (!items[i].binary) {
           throw new Error('No binary data exists on item!');
         }
-        
+
         const item = items[i].binary as any;
-        
+
         if (!item[binaryPropertyName]) {
           throw new Error(`Binary data property "${binaryPropertyName}" does not exist!`);
         }
-        
+
         // Get credentials directly
         const credentials = await this.getCredentials('elevenLabsApi');
-        
+
         // Create a direct request to the ElevenLabs API
         try {
           // Get the binary data as a buffer
           const binaryDataBuffer = await this.helpers.getBinaryDataBuffer(i, binaryPropertyName);
           const fileName = item[binaryPropertyName].fileName || 'file';
           const mimeType = item[binaryPropertyName].mimeType || 'application/octet-stream';
-          
-          console.log('Debug - File upload attempt:', {
-            fileName,
-            mimeType,
-            bufferLength: binaryDataBuffer.length,
-            hasCredentials: !!credentials.apiKey,
-          });
-          
+
           // Let's try a simpler approach with curl-like direct multipart form data
           // This is more similar to the curl example in the documentation
           const boundary = `----WebKitFormBoundary${Math.random().toString(16).substr(2)}`;
-          
+
           const formDataContent = Buffer.concat([
             // File part
             Buffer.from(`--${boundary}\r\n`),
@@ -552,7 +556,7 @@ export async function executeKnowledgeBaseOperation(
             Buffer.from(`Content-Type: ${mimeType}\r\n\r\n`),
             binaryDataBuffer,
             Buffer.from('\r\n'),
-            
+
             // Name part (if provided)
             ...(additionalFields.name ? [
               Buffer.from(`--${boundary}\r\n`),
@@ -560,13 +564,11 @@ export async function executeKnowledgeBaseOperation(
               Buffer.from(additionalFields.name),
               Buffer.from('\r\n'),
             ] : []),
-            
+
             // End boundary
             Buffer.from(`--${boundary}--\r\n`),
           ]);
-          
-          console.log(`Debug - Sending multipart form with boundary: ${boundary}`);
-          
+
           // Make direct request with raw form data
           const response = await this.helpers.httpRequest({
             method: 'POST',
@@ -580,10 +582,7 @@ export async function executeKnowledgeBaseOperation(
             json: false,
             returnFullResponse: true,
           });
-          
-          console.log('Debug - Response status:', response.statusCode);
-          console.log('Debug - Response headers:', response.headers);
-          
+
           // Parse response
           try {
             // Check if response.body is already an object or a JSON string
@@ -593,22 +592,10 @@ export async function executeKnowledgeBaseOperation(
               // If it's already an object, use it directly
               responseData = response.body;
             }
-            console.log('Debug - Parsed response data:', responseData);
           } catch (parseError) {
-            console.error('Debug - JSON parsing error:', {
-              error: parseError.message,
-              responseBody: response.body,
-            });
             throw new Error(`Failed to parse response: ${parseError.message}. Response: ${response.body}`);
           }
         } catch (error) {
-          console.error('Debug - Upload error details:', {
-            message: error.message,
-            response: error.response ? {
-              statusCode: error.response.statusCode,
-              body: error.response.body,
-            } : 'No response data',
-          });
           throw new Error(`Failed to upload file: ${error.message}`);
         }
       } else {
@@ -616,12 +603,12 @@ export async function executeKnowledgeBaseOperation(
       }
     }
   }
-  
+
   // COMPUTE RAG INDEX
   else if (operation === 'computeRagIndex') {
     const documentId = this.getNodeParameter('documentId', i) as string;
     const model = this.getNodeParameter('model', i) as string;
-    
+
     responseData = await elevenLabsApiRequest.call(
       this,
       'POST',

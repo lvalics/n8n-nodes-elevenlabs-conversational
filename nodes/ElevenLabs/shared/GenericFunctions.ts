@@ -41,7 +41,6 @@ export async function elevenLabsApiRequest(
   if (option.formData) {
     // For multipart form-data, it's better to use the FormData approach directly
     // in the specific service implementation rather than here
-    console.warn('Using formData option is deprecated. Use helpers.FormData directly instead.');
     
     options.body = option.formData;
     options.json = false;
