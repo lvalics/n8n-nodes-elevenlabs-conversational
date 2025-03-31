@@ -44,6 +44,7 @@
     ]
   },
   "devDependencies": {
+    "@types/form-data": "^2.5.0",
     "@types/node": "^22.13.10",
     "@typescript-eslint/parser": "~8.26.1",
     "eslint": "^9.22.0",
@@ -57,8 +58,7 @@
   },
   "dependencies": {
     "@trivago/prettier-plugin-sort-imports": "^5.2.2",
-    "axios": "^1.8.3",
-    "elevenlabs": "^0.2.0"
+    "axios": "^1.8.3"
   },
   "pnpm": {
     "overrides": {

@@ -39,11 +39,14 @@ export async function elevenLabsApiRequest(
   
   // Handle form data or JSON body
   if (option.formData) {
-    // For multipart form-data
-    options.body = option.formData;
+    // For multipart form-data, it's better to use the FormData approach directly
+    // in the specific service implementation rather than here
+    console.warn('Using formData option is deprecated. Use helpers.FormData directly instead.');
     
-    // Important: Don't set Content-Type for multipart/form-data
-    // The HTTP library will set it automatically with the boundary
+    options.body = option.formData;
+    options.json = false;
+    
+    // Don't set Content-Type for multipart/form-data
     if (options.headers && options.headers['Content-Type']) {
       delete options.headers['Content-Type'];
     }

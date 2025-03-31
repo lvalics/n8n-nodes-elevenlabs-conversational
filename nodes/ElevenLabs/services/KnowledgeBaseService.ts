@@ -489,11 +489,12 @@ export async function executeKnowledgeBaseOperation(
     };
     
     if (documentType === 'url') {
+      // For URL uploads - keep as JSON
       const url = this.getNodeParameter('url', i) as string;
       
       // Make sure the URL is being properly passed
       const body: any = {
-        url: url,  // Ensure this value is set correctly
+        url: url,
       };
       
       if (additionalFields.name) {
@@ -505,60 +506,111 @@ export async function executeKnowledgeBaseOperation(
         'POST',
         '/convai/knowledge-base',
         body,
-        {},  // Empty query parameters
       );
     } else {
-      // Handle file upload using multipart/form-data
+      // For file uploads - get binary data
       const binaryData = this.getNodeParameter('binaryData', i) as boolean;
       
       if (binaryData) {
         const binaryPropertyName = this.getNodeParameter('binaryPropertyName', i) as string;
         
-        if (items[i].binary === undefined) {
+        if (!items[i].binary) {
           throw new Error('No binary data exists on item!');
         }
         
         const item = items[i].binary as any;
         
-        if (item[binaryPropertyName] === undefined) {
+        if (!item[binaryPropertyName]) {
           throw new Error(`Binary data property "${binaryPropertyName}" does not exist!`);
         }
         
-        const binaryDataBuffer = await this.helpers.getBinaryDataBuffer(i, binaryPropertyName);
+        // Get credentials directly
+        const credentials = await this.getCredentials('elevenLabsApi');
         
-        // Create a proper multipart form-data structure
-        const formData: any = {};
-        
-        // Add the file with correct parameters
-        formData.file = {
-          value: binaryDataBuffer,
-          options: {
-            filename: item[binaryPropertyName].fileName || 'file',
-            contentType: item[binaryPropertyName].mimeType,
-          },
-        };
-        
-        // Add the name if specified
-        if (additionalFields.name) {
-          formData.name = additionalFields.name;
-        }
-        
-        // Make sure we're properly sending the form data
-        responseData = await elevenLabsApiRequest.call(
-          this,
-          'POST',
-          '/convai/knowledge-base',
-          {},   // Empty body since we're using formData
-          {},   // Empty query parameters
-          undefined,
-          { 
-            formData,
+        // Create a direct request to the ElevenLabs API
+        try {
+          // Get the binary data as a buffer
+          const binaryDataBuffer = await this.helpers.getBinaryDataBuffer(i, binaryPropertyName);
+          const fileName = item[binaryPropertyName].fileName || 'file';
+          const mimeType = item[binaryPropertyName].mimeType || 'application/octet-stream';
+          
+          console.log('Debug - File upload attempt:', {
+            fileName,
+            mimeType,
+            bufferLength: binaryDataBuffer.length,
+            hasCredentials: !!credentials.apiKey,
+          });
+          
+          // Let's try a simpler approach with curl-like direct multipart form data
+          // This is more similar to the curl example in the documentation
+          const boundary = `----WebKitFormBoundary${Math.random().toString(16).substr(2)}`;
+          
+          const formDataContent = Buffer.concat([
+            // File part
+            Buffer.from(`--${boundary}\r\n`),
+            Buffer.from(`Content-Disposition: form-data; name="file"; filename="${fileName}"\r\n`),
+            Buffer.from(`Content-Type: ${mimeType}\r\n\r\n`),
+            binaryDataBuffer,
+            Buffer.from('\r\n'),
+            
+            // Name part (if provided)
+            ...(additionalFields.name ? [
+              Buffer.from(`--${boundary}\r\n`),
+              Buffer.from(`Content-Disposition: form-data; name="name"\r\n\r\n`),
+              Buffer.from(additionalFields.name),
+              Buffer.from('\r\n'),
+            ] : []),
+            
+            // End boundary
+            Buffer.from(`--${boundary}--\r\n`),
+          ]);
+          
+          console.log(`Debug - Sending multipart form with boundary: ${boundary}`);
+          
+          // Make direct request with raw form data
+          const response = await this.helpers.httpRequest({
+            method: 'POST',
+            url: 'https://api.elevenlabs.io/v1/convai/knowledge-base',
             headers: {
-              // Remove the Content-Type header to let the form data set its own
-              'Content-Type': null,
+              'xi-api-key': credentials.apiKey as string,
+              'Content-Type': `multipart/form-data; boundary=${boundary}`,
+              'Content-Length': formDataContent.length.toString(),
             },
-          },
-        );
+            body: formDataContent,
+            json: false,
+            returnFullResponse: true,
+          });
+          
+          console.log('Debug - Response status:', response.statusCode);
+          console.log('Debug - Response headers:', response.headers);
+          
+          // Parse response
+          try {
+            // Check if response.body is already an object or a JSON string
+            if (typeof response.body === 'string') {
+              responseData = JSON.parse(response.body);
+            } else {
+              // If it's already an object, use it directly
+              responseData = response.body;
+            }
+            console.log('Debug - Parsed response data:', responseData);
+          } catch (parseError) {
+            console.error('Debug - JSON parsing error:', {
+              error: parseError.message,
+              responseBody: response.body,
+            });
+            throw new Error(`Failed to parse response: ${parseError.message}. Response: ${response.body}`);
+          }
+        } catch (error) {
+          console.error('Debug - Upload error details:', {
+            message: error.message,
+            response: error.response ? {
+              statusCode: error.response.statusCode,
+              body: error.response.body,
+            } : 'No response data',
+          });
+          throw new Error(`Failed to upload file: ${error.message}`);
+        }
       } else {
         throw new Error('Binary data is required for file upload');
       }
