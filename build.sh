@@ -2,7 +2,7 @@
 # build.sh - Build n8n custom node and copy to n8n custom directory
 
 # Set project name - change this for different modules
-PROJECT_NAME="<...>"
+PROJECT_NAME="elevenlabs-conversational"
 
 # Set your project directory
 PROJECT_DIR=~/n8n_dev/n8n-nodes-${PROJECT_NAME}

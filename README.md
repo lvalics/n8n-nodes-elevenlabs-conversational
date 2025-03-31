@@ -8,6 +8,8 @@ This n8n community node enables seamless integration of **[ElevenLabs](https://e
 - Voice customization and selection
 - Support for conversational AI workflows
 - Integration with ElevenLabs API for high-quality voice synthesis
+- Manage ElevenLabs Conversational Agents (create, update, delete, list)
+- Generate shareable links for your agents
 
 ## Installation
 
