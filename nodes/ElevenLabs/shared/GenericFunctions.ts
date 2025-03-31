@@ -19,24 +19,45 @@ export async function elevenLabsApiRequest(
 ) {
   const credentials = await this.getCredentials('elevenLabsApi');
   
+  // Base options
   const options: IHttpRequestOptions = {
     method,
-    body,
-    qs,
     url: uri || `https://api.elevenlabs.io/v1${resource}`,
     headers: {
       'xi-api-key': credentials.apiKey as string,
-      'Content-Type': 'application/json',
     },
     json: true,
   };
-
-  if (!Object.keys(body).length) {
-    delete options.body;
+  
+  // Custom headers if provided in options
+  if (option.headers && typeof option.headers === 'object') {
+    options.headers = { 
+      ...options.headers, 
+      ...(option.headers as Record<string, string>) 
+    };
   }
-
-  if (!Object.keys(qs).length) {
-    delete options.qs;
+  
+  // Handle form data or JSON body
+  if (option.formData) {
+    // For multipart form-data
+    options.body = option.formData;
+    
+    // Important: Don't set Content-Type for multipart/form-data
+    // The HTTP library will set it automatically with the boundary
+    if (options.headers && options.headers['Content-Type']) {
+      delete options.headers['Content-Type'];
+    }
+  } else if (Object.keys(body).length > 0) {
+    // For regular JSON data
+    options.body = body;
+    if (options.headers) {
+      options.headers['Content-Type'] = 'application/json';
+    }
+  }
+  
+  // Add query parameters if they exist
+  if (Object.keys(qs).length > 0) {
+    options.qs = qs;
   }
 
   try {
@@ -57,6 +78,7 @@ export async function elevenLabsApiRequestAllItems(
   endpoint: string,
   body: IDataObject = {},
   query: IDataObject = {},
+  dataKey: string = 'agents',
 ) {
   const returnData: IDataObject[] = [];
   let responseData;
@@ -73,8 +95,8 @@ export async function elevenLabsApiRequestAllItems(
     
     responseData = await elevenLabsApiRequest.call(this, method, endpoint, body, query);
     
-    if (responseData.agents && Array.isArray(responseData.agents)) {
-      returnData.push.apply(returnData, responseData.agents);
+    if (responseData[dataKey] && Array.isArray(responseData[dataKey])) {
+      returnData.push.apply(returnData, responseData[dataKey]);
     }
     
     nextCursor = responseData.next_cursor;

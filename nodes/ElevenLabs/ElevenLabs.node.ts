@@ -24,6 +24,11 @@ import {
   conversationFields, 
   executeConversationOperation 
 } from './services/ConversationService';
+import { 
+  knowledgeBaseOperations, 
+  knowledgeBaseFields, 
+  executeKnowledgeBaseOperation 
+} from './services/KnowledgeBaseService';
 
 export class ElevenLabs implements INodeType {
   description: INodeTypeDescription = {
@@ -61,6 +66,10 @@ export class ElevenLabs implements INodeType {
             value: 'conversation',
           },
           {
+            name: 'Knowledge Base',
+            value: 'knowledgeBase',
+          },
+          {
             name: 'Voice',
             value: 'voice',
           },
@@ -75,6 +84,8 @@ export class ElevenLabs implements INodeType {
       ...voiceFields,
       ...conversationOperations,
       ...conversationFields,
+      ...knowledgeBaseOperations,
+      ...knowledgeBaseFields,
       {
         displayName: 'Operation',
         name: 'operation',
@@ -813,6 +824,9 @@ export class ElevenLabs implements INodeType {
         }
         else if (resource === 'conversation') {
           responseItem = await executeConversationOperation.call(this, i, operation, i);
+        }
+        else if (resource === 'knowledgeBase') {
+          responseItem = await executeKnowledgeBaseOperation.call(this, i, operation, i);
         }
         
         // Add the response to the return data

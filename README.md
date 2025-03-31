@@ -8,7 +8,16 @@ This n8n community node enables seamless integration of **[ElevenLabs](https://e
 - Voice customization and selection
 - Support for conversational AI workflows
 - Integration with ElevenLabs API for high-quality voice synthesis
-- Manage ElevenLabs Conversational Agents (create, update, delete, list)
+- Manage ElevenLabs Conversational Agents (create, get, list)
+- Access ElevenLabs Voice Library
+- Handle Conversations (list, get, delete, feedback)
+- Knowledge Base management:
+  - Upload documents from files or URLs
+  - List, retrieve, and delete knowledge base documents
+  - Get document content and chunks
+  - Compute RAG (Retrieval Augmented Generation) indexes
+  - View agents dependent on specific documents
+- Make outbound phone calls via Twilio integration
 - Generate shareable links for your agents
 
 ## Installation
