@@ -6,6 +6,32 @@ import {
   NodeConnectionType,
 } from 'n8n-workflow';
 import { elevenLabsApiRequest, elevenLabsApiRequestAllItems } from './shared/GenericFunctions';
+import { SUPPORTED_LANGUAGES, LLM_MODELS } from './shared/Constants';
+
+// Utility functions for object operations
+function deepMerge(target: any, source: any): any {
+  const output = { ...target };
+  
+  if (isObject(target) && isObject(source)) {
+    Object.keys(source).forEach(key => {
+      if (isObject(source[key])) {
+        if (!(key in target)) {
+          output[key] = source[key];
+        } else {
+          output[key] = deepMerge(target[key], source[key]);
+        }
+      } else {
+        output[key] = source[key];
+      }
+    });
+  }
+  
+  return output;
+}
+
+function isObject(item: any): boolean {
+  return item && typeof item === 'object' && !Array.isArray(item);
+}
 
 export class ElevenLabs implements INodeType {
   description: INodeTypeDescription = {
@@ -96,40 +122,95 @@ export class ElevenLabs implements INodeType {
 
       // CREATE OPERATION
       {
-        displayName: 'Conversation Config',
-        name: 'conversationConfig',
-        type: 'json',
-        default: '{"agent":{"first_message":"Hello, how can I help you?","language":"en","prompt":{"prompt":"You are a helpful assistant.","llm":"gemini-2.0-flash-001"}}}',
-        description: 'Conversation configuration for the agent (required)',
+        displayName: 'Agent Name',
+        name: 'agentName',
+        type: 'string',
+        default: '',
+        description: 'The name of the agent',
+        required: true,
         displayOptions: {
           show: {
             resource: ['agent'],
             operation: ['create'],
           },
         },
-        placeholder: `{
-  "agent": {
-    "first_message": "Hello, how can I help you?",
-    "language": "en",
-    "prompt": {
-      "prompt": "You are a helpful assistant that answers questions professionally.",
-      "llm": "gemini-2.0-flash-001",
-      "temperature": 0.7,
-      "tools": [
-        {
-          "type": "client",
-          "description": "Search for information",
-          "name": "search"
-        }
-      ]
-    }
-  },
-  "tts": {
-    "model_id": "eleven_turbo_v2",
-    "voice_id": "cjVigY5qzO86Huf0OWal"
-  }
-}`,
+      },
+      {
+        displayName: 'System Prompt',
+        name: 'systemPrompt',
+        type: 'string',
+        typeOptions: {
+          rows: 4,
+        },
+        default: 'You are a helpful assistant that answers questions professionally.',
+        description: 'The system prompt is used to determine the persona of the agent and the context of the conversation',
         required: true,
+        displayOptions: {
+          show: {
+            resource: ['agent'],
+            operation: ['create'],
+          },
+        },
+      },
+      {
+        displayName: 'Agent Language',
+        name: 'agentLanguage',
+        type: 'options',
+        options: SUPPORTED_LANGUAGES,
+        default: 'en',
+        description: 'Choose the default language the agent will communicate in',
+        required: true,
+        displayOptions: {
+          show: {
+            resource: ['agent'],
+            operation: ['create'],
+          },
+        },
+      },
+      {
+        displayName: 'First Message',
+        name: 'firstMessage',
+        type: 'string',
+        typeOptions: {
+          rows: 2,
+        },
+        default: 'Hello, how can I help you?',
+        description: 'The first message the agent will say. If empty, the agent will wait for the user to start the conversation. You can use system variables like: system__agent_id, system__caller_id, system__called_number, system__time_utc, system__conversation_id, etc.',
+        hint: 'Supports variables: system__agent_id, system__caller_id, system__called_number, system__call_duration_secs, system__time_utc, system__conversation_id, system__call_sid',
+        displayOptions: {
+          show: {
+            resource: ['agent'],
+            operation: ['create'],
+          },
+        },
+      },
+      {
+        displayName: 'LLM Model',
+        name: 'llmModel',
+        type: 'options',
+        options: LLM_MODELS,
+        default: 'gemini-2.0-flash-001',
+        description: 'The LLM model to use for the agent',
+        required: true,
+        displayOptions: {
+          show: {
+            resource: ['agent'],
+            operation: ['create'],
+          },
+        },
+      },
+      {
+        displayName: 'Voice ID',
+        name: 'voiceId',
+        type: 'string',
+        default: 'cjVigY5qzO86Huf0OWal', // Default to ElevenLabs "Rachel" voice
+        description: 'The voice ID to use for the agent. Find voice IDs in the ElevenLabs dashboard',
+        displayOptions: {
+          show: {
+            resource: ['agent'],
+            operation: ['create'],
+          },
+        },
       },
       {
         displayName: 'Additional Fields',
@@ -145,11 +226,19 @@ export class ElevenLabs implements INodeType {
         },
         options: [
           {
-            displayName: 'Name',
-            name: 'name',
-            type: 'string',
-            default: '',
-            description: 'A name to make the agent easier to find',
+            displayName: 'Additional Languages',
+            name: 'additionalLanguages',
+            type: 'multiOptions',
+            options: SUPPORTED_LANGUAGES,
+            default: [],
+            description: 'Specify additional languages which callers can choose from',
+          },
+          {
+            displayName: 'Advanced Configuration',
+            name: 'advancedConfig',
+            type: 'json',
+            default: '{}',
+            description: 'Advanced configuration for the agent in JSON format',
           },
           {
             displayName: 'Platform Settings',
@@ -298,36 +387,87 @@ export class ElevenLabs implements INodeType {
         if (resource === 'agent') {
           // CREATE AGENT
           if (operation === 'create') {
-            let conversationConfig = this.getNodeParameter('conversationConfig', i);
-            
-            // If conversationConfig is a string, try to parse it
-            if (typeof conversationConfig === 'string') {
-              try {
-                conversationConfig = JSON.parse(conversationConfig);
-              } catch (error) {
-                throw new Error(`Invalid JSON in conversation config: ${error.message}`);
-              }
-            }
+            // Get all the individual fields
+            const agentName = this.getNodeParameter('agentName', i) as string;
+            const systemPrompt = this.getNodeParameter('systemPrompt', i) as string;
+            const agentLanguage = this.getNodeParameter('agentLanguage', i) as string;
+            const firstMessage = this.getNodeParameter('firstMessage', i) as string;
+            const llmModel = this.getNodeParameter('llmModel', i) as string;
+            const voiceId = this.getNodeParameter('voiceId', i) as string;
             
             const additionalFields = this.getNodeParameter('additionalFields', i) as {
-              name?: string;
-              platformSettings?: object;
+              additionalLanguages?: string[];
+              advancedConfig?: string | object;
+              platformSettings?: string | object;
               useToolIds?: boolean;
             };
 
+            // Build the conversation_config object
+            let conversation_config: any = {
+              agent: {
+                language: agentLanguage,
+                prompt: {
+                  prompt: systemPrompt,
+                  llm: llmModel,
+                }
+              }
+            };
+            
+            // Add optional fields if they exist
+            if (firstMessage) {
+              conversation_config.agent.first_message = firstMessage;
+            }
+            
+            // Add voice settings if provided
+            if (voiceId) {
+              conversation_config.tts = {
+                model_id: "eleven_turbo_v2",
+                voice_id: voiceId
+              };
+            }
+            
+            // Add additional languages if specified
+            if (additionalFields.additionalLanguages && additionalFields.additionalLanguages.length > 0) {
+              conversation_config.language_presets = {};
+              
+              for (const lang of additionalFields.additionalLanguages) {
+                conversation_config.language_presets[lang] = {
+                  overrides: {
+                    agent: {
+                      language: lang
+                    }
+                  }
+                };
+              }
+            }
+            
+            // Merge any advanced configuration
+            if (additionalFields.advancedConfig) {
+              let advancedConfig = additionalFields.advancedConfig;
+              
+              // Parse if it's a string
+              if (typeof advancedConfig === 'string') {
+                try {
+                  advancedConfig = JSON.parse(advancedConfig);
+                } catch (error) {
+                  throw new Error(`Invalid JSON in advanced configuration: ${error.message}`);
+                }
+              }
+              
+              // Deep merge the advanced config with our base config
+              conversation_config = deepMerge(conversation_config, advancedConfig);
+            }
+
             // Create the request body
             const body: any = {
-              conversation_config: conversationConfig,
+              name: agentName,
+              conversation_config: conversation_config,
             };
-
-            if (additionalFields.name) {
-              body.name = additionalFields.name;
-            }
 
             if (additionalFields.platformSettings) {
               let platformSettings = additionalFields.platformSettings;
               
-              // If platformSettings is a string, try to parse it
+              // Parse if it's a string
               if (typeof platformSettings === 'string') {
                 try {
                   platformSettings = JSON.parse(platformSettings);
@@ -363,7 +503,7 @@ export class ElevenLabs implements INodeType {
               });
             } catch (error) {
               if (error.message.includes('422')) {
-                throw new Error(`Request validation failed: ${error.message}. Please check your conversation configuration format.`);
+                throw new Error(`Request validation failed: ${error.message}. Please check your agent configuration.`);
               }
               throw error;
             }
