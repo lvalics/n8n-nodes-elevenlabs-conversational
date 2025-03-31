@@ -5,40 +5,32 @@ import {
   INodeTypeDescription,
   NodeConnectionType,
 } from 'n8n-workflow';
-import { elevenLabsApiRequest, elevenLabsApiRequestAllItems } from './shared/GenericFunctions';
+
 import { SUPPORTED_LANGUAGES, LLM_MODELS } from './shared/Constants';
 
-// Utility functions for object operations
-function deepMerge(target: any, source: any): any {
-  const output = { ...target };
-  
-  if (isObject(target) && isObject(source)) {
-    Object.keys(source).forEach(key => {
-      if (isObject(source[key])) {
-        if (!(key in target)) {
-          output[key] = source[key];
-        } else {
-          output[key] = deepMerge(target[key], source[key]);
-        }
-      } else {
-        output[key] = source[key];
-      }
-    });
-  }
-  
-  return output;
-}
-
-function isObject(item: any): boolean {
-  return item && typeof item === 'object' && !Array.isArray(item);
-}
+// Import services
+import { 
+  agentOperations, 
+  agentFields, 
+  executeAgentOperation 
+} from './services/AgentService';
+import { 
+  voiceOperations, 
+  voiceFields, 
+  executeVoiceOperation 
+} from './services/VoiceService';
+import { 
+  conversationOperations, 
+  conversationFields, 
+  executeConversationOperation 
+} from './services/ConversationService';
 
 export class ElevenLabs implements INodeType {
   description: INodeTypeDescription = {
     displayName: 'Eleven Labs Conversational',
     name: 'elevenLabsConversational',
     group: ['transform'],
-		icon: 'file:elevenlabs.svg',
+    icon: 'file:elevenlabs.svg',
     version: 1,
     subtitle: '={{$parameter["resource"] + ": " + $parameter["operation"]}}',
     description: 'Interact with ElevenLabs Conversational AI API',
@@ -75,6 +67,14 @@ export class ElevenLabs implements INodeType {
         ],
         default: 'agent',
       },
+      
+      // Import all service operations and fields
+      ...agentOperations,
+      ...agentFields,
+      ...voiceOperations,
+      ...voiceFields,
+      ...conversationOperations,
+      ...conversationFields,
       {
         displayName: 'Operation',
         name: 'operation',
@@ -797,540 +797,29 @@ export class ElevenLabs implements INodeType {
     const items = this.getInputData();
     const returnData: INodeExecutionData[] = [];
 
-    const resource = this.getNodeParameter('resource', 0) as string;
-    const operation = this.getNodeParameter('operation', 0) as string;
-
     for (let i = 0; i < items.length; i++) {
       try {
+        const resource = this.getNodeParameter('resource', i) as string;
+        const operation = this.getNodeParameter('operation', i) as string;
+        
+        let responseItem;
+        
+        // Route execution to the appropriate service based on the resource
         if (resource === 'agent') {
-          // CREATE AGENT
-          if (operation === 'create') {
-            // Get all the individual fields
-            const agentName = this.getNodeParameter('agentName', i) as string;
-            const systemPrompt = this.getNodeParameter('systemPrompt', i) as string;
-            const agentLanguage = this.getNodeParameter('agentLanguage', i) as string;
-            const firstMessage = this.getNodeParameter('firstMessage', i) as string;
-            const llmModel = this.getNodeParameter('llmModel', i) as string;
-            const voiceId = this.getNodeParameter('voiceId', i) as string;
-            
-            const additionalFields = this.getNodeParameter('additionalFields', i) as {
-              additionalLanguages?: string[];
-              advancedConfig?: string | object;
-              platformSettings?: string | object;
-              useToolIds?: boolean;
-            };
-
-            // Build the conversation_config object
-            let conversation_config: any = {
-              agent: {
-                language: agentLanguage,
-                prompt: {
-                  prompt: systemPrompt,
-                  llm: llmModel,
-                }
-              }
-            };
-            
-            // Add optional fields if they exist
-            if (firstMessage) {
-              conversation_config.agent.first_message = firstMessage;
-            }
-            
-            // Add voice settings if provided
-            if (voiceId) {
-              conversation_config.tts = {
-                model_id: "eleven_turbo_v2",
-                voice_id: voiceId
-              };
-            }
-            
-            // Add additional languages if specified
-            if (additionalFields.additionalLanguages && additionalFields.additionalLanguages.length > 0) {
-              conversation_config.language_presets = {};
-              
-              for (const lang of additionalFields.additionalLanguages) {
-                conversation_config.language_presets[lang] = {
-                  overrides: {
-                    agent: {
-                      language: lang
-                    }
-                  }
-                };
-              }
-            }
-            
-            // Merge any advanced configuration
-            if (additionalFields.advancedConfig) {
-              let advancedConfig = additionalFields.advancedConfig;
-              
-              // Parse if it's a string
-              if (typeof advancedConfig === 'string') {
-                try {
-                  advancedConfig = JSON.parse(advancedConfig);
-                } catch (error) {
-                  throw new Error(`Invalid JSON in advanced configuration: ${error.message}`);
-                }
-              }
-              
-              // Deep merge the advanced config with our base config
-              conversation_config = deepMerge(conversation_config, advancedConfig);
-            }
-
-            // Create the request body
-            const body: any = {
-              name: agentName,
-              conversation_config: conversation_config,
-            };
-
-            if (additionalFields.platformSettings) {
-              let platformSettings = additionalFields.platformSettings;
-              
-              // Parse if it's a string
-              if (typeof platformSettings === 'string') {
-                try {
-                  platformSettings = JSON.parse(platformSettings);
-                  body.platform_settings = platformSettings;
-                } catch (error) {
-                  throw new Error(`Invalid JSON in platform settings: ${error.message}`);
-                }
-              } else {
-                body.platform_settings = platformSettings;
-              }
-            }
-
-            // Create query parameters
-            const qs: any = {};
-            if (additionalFields.useToolIds) {
-              qs.use_tool_ids = true;
-            }
-
-            try {
-              // Make the API request
-              const responseData = await elevenLabsApiRequest.call(
-                this,
-                'POST',
-                '/convai/agents/create',
-                body,
-                qs,
-              );
-
-              // Return the response
-              returnData.push({
-                json: responseData,
-                pairedItem: { item: i },
-              });
-            } catch (error) {
-              if (error.message.includes('422')) {
-                throw new Error(`Request validation failed: ${error.message}. Please check your agent configuration.`);
-              }
-              throw error;
-            }
-          }
-
-          // GET AGENT
-          else if (operation === 'get') {
-            const agentId = this.getNodeParameter('agentId', i) as string;
-
-            const responseData = await elevenLabsApiRequest.call(
-              this,
-              'GET',
-              `/convai/agents/${agentId}`,
-            );
-
-            returnData.push({
-              json: responseData,
-              pairedItem: { item: i },
-            });
-          }
-
-          // GET AGENT LINK
-          else if (operation === 'getLink') {
-            const agentId = this.getNodeParameter('agentId', i) as string;
-            const options = this.getNodeParameter('options', i, {}) as {
-              generateToken?: boolean;
-              tokenDuration?: number;
-              maxUses?: number;
-            };
-
-            // Build query parameters
-            const qs: any = {};
-            
-            if (options.generateToken) {
-              qs.generate_token = true;
-              
-              if (options.tokenDuration) {
-                qs.token_duration_days = options.tokenDuration;
-              }
-              
-              if (options.maxUses !== undefined) {
-                qs.token_max_uses = options.maxUses;
-              }
-            }
-
-            const responseData = await elevenLabsApiRequest.call(
-              this,
-              'GET',
-              `/convai/agents/${agentId}/link`,
-              {},
-              qs,
-            );
-
-            returnData.push({
-              json: responseData,
-              pairedItem: { item: i },
-            });
-          }
-
-          // LIST AGENTS
-          else if (operation === 'list') {
-            const returnAll = this.getNodeParameter('returnAll', i) as boolean;
-            const filters = this.getNodeParameter('filters', i) as {
-              search?: string;
-            };
-
-            const qs: any = {};
-            if (filters.search) {
-              qs.search = filters.search;
-            }
-
-            let responseData;
-            if (returnAll) {
-              responseData = await elevenLabsApiRequestAllItems.call(
-                this,
-                'GET',
-                '/convai/agents',
-                {},
-                qs,
-              );
-              
-              returnData.push({
-                json: { agents: responseData },
-                pairedItem: { item: i },
-              });
-            } else {
-              const limit = this.getNodeParameter('limit', i) as number;
-              qs.page_size = limit;
-
-              const response = await elevenLabsApiRequest.call(
-                this,
-                'GET',
-                '/convai/agents',
-                {},
-                qs,
-              );
-
-              returnData.push({
-                json: response,
-                pairedItem: { item: i },
-              });
-            }
-          }
-
-        }
+          responseItem = await executeAgentOperation.call(this, i, operation, i);
+        } 
         else if (resource === 'voice') {
-          // LIST VOICES
-          if (operation === 'list') {
-            const returnAll = this.getNodeParameter('returnAll', i) as boolean;
-            const filters = this.getNodeParameter('filters', i) as {
-              search?: string;
-              category?: string;
-              voiceType?: string;
-              sort?: string;
-              sortDirection?: string;
-              includeTotalCount?: boolean;
-            };
-
-            const qs: any = {};
-            
-            // Add filters to query parameters
-            if (filters.search) {
-              qs.search = filters.search;
-            }
-            if (filters.category) {
-              qs.category = filters.category;
-            }
-            if (filters.voiceType) {
-              qs.voice_type = filters.voiceType;
-            }
-            if (filters.sort) {
-              qs.sort = filters.sort;
-            }
-            if (filters.sortDirection) {
-              qs.sort_direction = filters.sortDirection;
-            }
-            if (filters.includeTotalCount !== undefined) {
-              qs.include_total_count = filters.includeTotalCount;
-            }
-
-            // Note that the voice API uses v2 endpoint
-            if (returnAll) {
-              // Use pagination to get all voices
-              let allVoices: any[] = [];
-              let hasMore = true;
-              let nextPageToken = '';
-              
-              while (hasMore) {
-                if (nextPageToken) {
-                  qs.next_page_token = nextPageToken;
-                }
-                
-                const response = await elevenLabsApiRequest.call(
-                  this,
-                  'GET',
-                  '/voices',
-                  {},
-                  qs,
-                  'https://api.elevenlabs.io/v2/voices' // Use v2 endpoint for voices
-                );
-                
-                if (response.voices && Array.isArray(response.voices)) {
-                  allVoices = allVoices.concat(response.voices);
-                }
-                
-                hasMore = response.has_more || false;
-                nextPageToken = response.next_page_token || '';
-              }
-              
-              returnData.push({
-                json: { voices: allVoices },
-                pairedItem: { item: i },
-              });
-            } else {
-              const limit = this.getNodeParameter('limit', i) as number;
-              qs.page_size = limit;
-              
-              const response = await elevenLabsApiRequest.call(
-                this,
-                'GET',
-                '/voices',
-                {},
-                qs,
-                'https://api.elevenlabs.io/v2/voices' // Use v2 endpoint for voices
-              );
-              
-              returnData.push({
-                json: response,
-                pairedItem: { item: i },
-              });
-            }
-          }
-          
-          // GET VOICE
-          else if (operation === 'get') {
-            const voiceId = this.getNodeParameter('voiceId', i) as string;
-            
-            const response = await elevenLabsApiRequest.call(
-              this,
-              'GET',
-              `/voices/${voiceId}`, // Use the v1 voices endpoint with voice ID
-              {},
-              {},
-              undefined // Don't specify a full URI, let it use the default v1 endpoint
-            );
-            
-            returnData.push({
-              json: response,
-              pairedItem: { item: i },
-            });
-          }
+          responseItem = await executeVoiceOperation.call(this, i, operation, i);
         }
         else if (resource === 'conversation') {
-          // LIST CONVERSATIONS
-          if (operation === 'list') {
-            const returnAll = this.getNodeParameter('returnAll', i) as boolean;
-            const filters = this.getNodeParameter('filters', i) as {
-              agentId?: string;
-              callSuccessful?: string;
-            };
-
-            const qs: any = {};
-            
-            if (filters.agentId) {
-              qs.agent_id = filters.agentId;
-            }
-            
-            if (filters.callSuccessful) {
-              qs.call_successful = filters.callSuccessful;
-            }
-
-            if (returnAll) {
-              const responseData = await elevenLabsApiRequestAllItems.call(
-                this,
-                'GET',
-                '/convai/conversations',
-                {},
-                qs,
-              );
-              
-              returnData.push({
-                json: { conversations: responseData },
-                pairedItem: { item: i },
-              });
-            } else {
-              const limit = this.getNodeParameter('limit', i) as number;
-              qs.page_size = limit;
-              
-              const response = await elevenLabsApiRequest.call(
-                this,
-                'GET',
-                '/convai/conversations',
-                {},
-                qs,
-              );
-              
-              returnData.push({
-                json: response,
-                pairedItem: { item: i },
-              });
-            }
-          }
-          
-          // GET CONVERSATION
-          else if (operation === 'get') {
-            const conversationId = this.getNodeParameter('conversationId', i) as string;
-            
-            const response = await elevenLabsApiRequest.call(
-              this,
-              'GET',
-              `/convai/conversations/${conversationId}`,
-            );
-            
-            returnData.push({
-              json: response,
-              pairedItem: { item: i },
-            });
-          }
-          
-          // DELETE CONVERSATION
-          else if (operation === 'delete') {
-            const conversationId = this.getNodeParameter('conversationId', i) as string;
-            
-            const response = await elevenLabsApiRequest.call(
-              this,
-              'DELETE',
-              `/convai/conversations/${conversationId}`,
-            );
-            
-            returnData.push({
-              json: response || { success: true },
-              pairedItem: { item: i },
-            });
-          }
-          
-          // GET CONVERSATION AUDIO
-          else if (operation === 'getAudio') {
-            const conversationId = this.getNodeParameter('conversationId', i) as string;
-            
-            const response = await elevenLabsApiRequest.call(
-              this,
-              'GET',
-              `/convai/conversations/${conversationId}/audio`,
-            );
-            
-            returnData.push({
-              json: response,
-              pairedItem: { item: i },
-            });
-          }
-          
-          // GET SIGNED URL
-          else if (operation === 'getSignedUrl') {
-            const agentId = this.getNodeParameter('agentId', i) as string;
-            
-            const response = await elevenLabsApiRequest.call(
-              this,
-              'GET',
-              '/convai/conversation/get_signed_url',
-              {},
-              { agent_id: agentId },
-            );
-            
-            returnData.push({
-              json: response,
-              pairedItem: { item: i },
-            });
-          }
-          
-          // SEND FEEDBACK
-          else if (operation === 'sendFeedback') {
-            const conversationId = this.getNodeParameter('conversationId', i) as string;
-            const feedback = this.getNodeParameter('feedback', i) as string;
-            
-            const response = await elevenLabsApiRequest.call(
-              this,
-              'POST',
-              `/convai/conversations/${conversationId}/feedback`,
-              { feedback },
-            );
-            
-            returnData.push({
-              json: response || { success: true },
-              pairedItem: { item: i },
-            });
-          }
-          
-          // OUTBOUND CALL
-          else if (operation === 'outboundCall') {
-            const agentId = this.getNodeParameter('agentId', i) as string;
-            const agentPhoneNumberId = this.getNodeParameter('agentPhoneNumberId', i) as string;
-            const toNumber = this.getNodeParameter('toNumber', i) as string;
-            const additionalOptions = this.getNodeParameter('additionalOptions', i) as {
-              firstMessage?: string;
-              dynamicVariables?: string | object;
-            };
-            
-            const body: any = {
-              agent_id: agentId,
-              agent_phone_number_id: agentPhoneNumberId,
-              to_number: toNumber,
-            };
-            
-            // Add conversation initiation data if we have additional options
-            if (Object.keys(additionalOptions).length > 0) {
-              const conversationInitiationClientData: any = {};
-              
-              if (additionalOptions.firstMessage) {
-                if (!conversationInitiationClientData.conversation_config_override) {
-                  conversationInitiationClientData.conversation_config_override = {};
-                }
-                if (!conversationInitiationClientData.conversation_config_override.agent) {
-                  conversationInitiationClientData.conversation_config_override.agent = {};
-                }
-                conversationInitiationClientData.conversation_config_override.agent.first_message = additionalOptions.firstMessage;
-              }
-              
-              if (additionalOptions.dynamicVariables) {
-                let dynamicVariables = additionalOptions.dynamicVariables;
-                
-                if (typeof dynamicVariables === 'string') {
-                  try {
-                    dynamicVariables = JSON.parse(dynamicVariables);
-                  } catch (error) {
-                    throw new Error(`Invalid JSON for dynamic variables: ${error.message}`);
-                  }
-                }
-                
-                conversationInitiationClientData.dynamic_variables = dynamicVariables;
-              }
-              
-              if (Object.keys(conversationInitiationClientData).length > 0) {
-                body.conversation_initiation_client_data = conversationInitiationClientData;
-              }
-            }
-            
-            const response = await elevenLabsApiRequest.call(
-              this,
-              'POST',
-              '/convai/twilio/outbound_call',
-              body,
-            );
-            
-            returnData.push({
-              json: response,
-              pairedItem: { item: i },
-            });
-          }
+          responseItem = await executeConversationOperation.call(this, i, operation, i);
         }
+        
+        // Add the response to the return data
+        if (responseItem) {
+          returnData.push(responseItem);
+        }
+        
       } catch (error) {
         if (this.continueOnFail()) {
           returnData.push({
